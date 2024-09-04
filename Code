@@ -1,0 +1,141 @@
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+const int player1ButtonPin = 26; // Pin for player 1 button
+const int player2ButtonPin = 15; // Pin for player 2 button
+const int startButtonPin = 4;   // Pin for start game button
+
+unsigned long player1Time = 600000; // 10 minutes in milliseconds
+unsigned long player2Time = 600000; // 10 minutes in milliseconds
+unsigned long lastDebounceTime1 = 0;
+unsigned long lastDebounceTime2 = 0;
+unsigned long debounceDelay = 50; // Debounce time in milliseconds
+bool gameStarted = false;
+bool player1Turn = true; // True if it's player 1's turn, false for player 2
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(player1ButtonPin, INPUT);
+  pinMode(player2ButtonPin, INPUT);
+  pinMode(startButtonPin, INPUT);
+
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;);
+  }
+
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0,0);
+  display.println("Chess Clock");
+  display.display();
+  delay(5000);
+
+
+void loop() {
+  unsigned long currentTime = millis();
+
+  while(!gameStarted){
+    display.clearDisplay();
+    delay(2000);
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setCursor(0,0);
+    display.println("How Much Time?");
+    display.println("Select w/ Button");
+    display.println("2|5|10");
+    display.display();
+
+    
+    if(digitalRead(startButtonPin) == HIGH){
+      player1Time = 120000;
+      player2Time = 120000;
+      break;
+    }
+    if(digitalRead(player1ButtonPin) == HIGH){
+      player1Time = 300000;
+      player2Time = 300000;
+      break;
+    }
+    if(digitalRead(player2ButtonPin) == HIGH){
+      player1Time = 600000;
+      player2Time = 600000;
+      break;
+    }
+    delay(50);
+
+  }
+
+  // Check if game is started
+  if (!gameStarted && digitalRead(startButtonPin) == HIGH) {
+    gameStarted = true;
+    lastDebounceTime1 = currentTime;
+    lastDebounceTime2 = currentTime;
+  }
+
+  // Update player times if game is started
+  if (gameStarted) {
+    // Check player 1 button
+    if (currentTime - lastDebounceTime1 >= debounceDelay) {
+      if (digitalRead(player1ButtonPin) == HIGH) {
+        if (player1Turn) {
+          player1Turn = false; // Player 1's turn ends
+          lastDebounceTime1 = currentTime;
+        }
+      }
+    }
+
+    // Check player 2 button
+    if (currentTime - lastDebounceTime2 >= debounceDelay) {
+      if (digitalRead(player2ButtonPin) == HIGH) {
+        if (!player1Turn) {
+          player1Turn = true; // Player 2's turn ends
+          lastDebounceTime2 = currentTime;
+        }
+      }
+    }
+
+    // Update player times based on turn
+    if (player1Turn) {
+      player1Time -= (currentTime - lastDebounceTime1);
+      lastDebounceTime1 = currentTime;
+    } else {
+      player2Time -= (currentTime - lastDebounceTime2);
+      lastDebounceTime2 = currentTime;
+    }
+  }
+
+  // Display times on OLED
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print("Player 1: ");
+  display.print(player1Time / 60000);
+  display.print(":");
+  display.print((player1Time / 1000) % 60);
+
+  display.setCursor(0, 20);
+  display.print("Player 2: ");
+  display.print(player2Time / 60000);
+  display.print(":");
+  display.print((player2Time / 1000) % 60);
+
+  display.display();
+
+  // Check for game end
+  if (player1Time <= 0 || player2Time <= 0) {
+    gameStarted = false;
+    // Handle game end here, e.g., display winner
+  }
+
+  delay(100); // Adjust delay as needed for responsiveness
+}
